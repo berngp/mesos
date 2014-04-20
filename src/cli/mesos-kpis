@@ -1,0 +1,261 @@
+#!/usr/bin/env python
+
+import collections
+import datetime
+import json
+import signal
+import sys
+
+from contextlib import closing
+from optparse import OptionParser
+from urllib2 import urlopen
+
+from mesos import http
+from mesos.cli import *
+from mesos.futures import *
+
+
+if sys.version_info < (2, 6, 0):
+    sys.stderr.write('Expecting Python >= 2.6\n')
+    sys.exit(1)
+
+# State Reporting
+STATE_BASIC_ROOT_KPIS = {
+    "activated_slaves": "int",
+    "cluster": "string",
+    "deactivated_slaves": "int",
+    "failed_tasks": "int",
+    "finished_tasks": "int",
+    "killed_tasks": "int",
+    "leader": "string",
+    "lost_tasks": "int",
+    "staged_tasks": "int",
+    "started_tasks": "int",
+    "version": "string"
+}
+
+STATE_INTERMEDIATE_ROOT_KPIS = STATE_BASIC_ROOT_KPIS
+
+STATE_ADVANCED_ROOT_KPIS = dict(STATE_BASIC_ROOT_KPIS.items() + STATE_INTERMEDIATE_ROOT_KPIS.items())
+
+#Stats Reporting
+STATS_BASIC_ROOT_KPIS = {
+    "activated_slaves": "int",
+    "active_schedulers": "int",
+    "cpus_percent": "float",
+    "cpus_total": "int",
+    "cpus_used": "int",
+    "deactivated_slaves": "int",
+    "disk_percent": "float",
+    "disk_total": "int",
+    "disk_used": "float",
+    "failed_tasks": "int",
+    "finished_tasks": "int",
+    "killed_tasks": "int",
+    "lost_tasks": "int",
+    "mem_percent": "float",
+    "mem_total": "int",
+    "mem_used": "int"
+}
+
+STATS_INTERMEDIATE_ROOT_KPIS = dict({
+    "elected": "int",
+    "invalid_status_updates": "int",
+    "outstanding_offers": "int",
+    "staged_tasks": "int",
+    "started_tasks": "int",
+    "total_schedulers": "int",
+    "uptime": "double",
+    "valid_status_updates": "int"
+}.items() + STATS_BASIC_ROOT_KPIS.items())
+
+STATS_ADVANCED_ROOT_KPIS = dict(STATS_BASIC_ROOT_KPIS.items() + STATS_INTERMEDIATE_ROOT_KPIS.items())
+
+
+def main():
+    # Parse options for this script.
+    parser = OptionParser()
+    parser.add_option(
+        '-m',
+        '--master',
+        help="the mesos master. e.g. --master=localhost:5005 or --master=zk://zk1,zk2,zk3:2181/mesos")
+    parser.add_option(
+        '-c',
+        '--conf',
+        help="path to a file used to resolve the mesos master, the file most contain either a --master=? or --zk=? entry.")
+#    parser.add_option('--timeout', default=5.0)
+    parser.add_option('--verbose', default=False)
+    parser.add_option('--level', default='basic')
+    parser.add_option('--flatten_separator', default='_')
+    parser.add_option('--prefix', default=None)
+    parser.add_option('--include_type', default=False)
+    (options, args) = parser.parse_args(sys.argv)
+
+    if options.master is None and options.conf is None:
+        usage("""Please specify either a Mesos Master through (--master) or
+a configuration file (--conf) that has either a --master or --zk entry.\n""", parser)
+
+    # Resolve the master.
+    master = resolve_master(options)
+    # Get the master's state.
+    state = get_remote(master, '/master/state.json')
+    # report
+    report_state(state, options)
+    # Get the master's stats.
+    stats = get_remote(master, '/master/stats.json')
+    # report
+    report_stats(stats, options)
+    sys.exit(0)
+
+
+def resolve_master(options):
+    import re
+
+    if options.master is not None:
+        master = options.master
+
+    elif options.conf is not None:
+        master_str = None
+        zk_str = None
+
+        with open(options.conf, 'r') as f:
+            for line in f:
+                line.strip()
+                if line.startswith('--master'):
+                    master_str = re.compile("^--master=(.+)").match(line).group(1)
+                elif line.startswith('--zk'):
+                    zk_str = re.compile("^--zk=(.+)").match(line).group(1)
+            if master_str is not None:
+                master = master_str
+            elif zk_str is not None:
+                master = zk_str
+    else:
+        sys.stderr.write("File %(conf)s doesn't define a --master or --zk entry.\n" % {"conf": options.conf})
+
+    if master is None:
+        sys.stderr.write('Unable to identify a Master!\n')
+        sys.exit(-1)
+
+    return resolve(master)
+
+
+def report_state(state, options):
+    r = {}
+    kpis = state_kpis(options.level)
+    for k in kpis.keys():
+        r[k] = state.get(k, "")
+    do_report(r, "state", kpis, options)
+
+
+def report_stats(d, options):
+    r = {}
+    kpis = stats_kpis(options.level)
+    for k in kpis.keys():
+        r[k] = d.get(k, "")
+    do_report(r, "stats", kpis, options)
+
+
+def state_kpis(level='basic'):
+    return {
+        "basic": STATE_BASIC_ROOT_KPIS,
+        "INTERMEDIATE": STATE_INTERMEDIATE_ROOT_KPIS,
+        "advanced": STATE_ADVANCED_ROOT_KPIS
+    }.get(level.lower(), {})
+
+
+def stats_kpis(level='basic'):
+    return {
+        "basic": STATS_BASIC_ROOT_KPIS,
+        "INTERMEDIATE": STATS_INTERMEDIATE_ROOT_KPIS,
+        "advanced": STATS_ADVANCED_ROOT_KPIS
+    }.get(level.lower(), {})
+
+
+def slaves_kpis(state, level='basic'):
+    # Collect all the active frameworks and tasks by slave ID.
+    active = {}
+    for framework in state['frameworks']:
+        for task in framework['tasks']:
+            if task['slave_id'] not in active.keys():
+                active[task['slave_id']] = []
+            active[task['slave_id']].append((framework, task))
+
+    with ThreadingExecutor() as executor:
+        # Grab all the slaves with active tasks.
+        slaves = [slave for slave in state['slaves'] if slave['id'] in active]
+
+        # Now submit calls to get the statistics for each slave.
+        path = '/monitor/statistics.json'
+        futures = dict((executor.submit(http.get, slave['pid'], path), slave)
+                       for slave in slaves)
+
+        # And wait for each future to complete!
+        for future in as_completed(futures, timeout):
+            slave = futures[future]
+            try:
+                statistics = json.loads(future.result())
+            except TimeoutError:
+                sys.stderr.write('Timed out while waiting for slaves\n')
+                sys.exit(1)
+            except Exception as e:
+                # TODO(benh): Print error if 'verbose'.
+                pass
+            finally:
+                for framework, task in active[slave['id']]:
+                    sys.stdout.write('\n')
+                    sys.stdout.write(columns[0].truncate(framework['user']))
+                    sys.stdout.write(columns[1].truncate(framework['name']))
+                    sys.stdout.write(columns[2].truncate(task['name']))
+                    sys.stdout.write(columns[3].truncate(slave['hostname']))
+                    sys.stdout.write(columns[4].truncate(mem(task, statistics)))
+                    sys.stdout.write(columns[5].truncate(time(task, statistics)))
+                    sys.stdout.write(columns[6].truncate(cpus(task, statistics)))
+
+    
+def get_remote(adress, endpoint):
+    try:
+        return json.loads(http.get(address, endpoint))
+    except:
+        sys.stderr.write('Failed to get %(endpoint) from %(address) !\n' % locals())
+        sys.exit(1)
+
+
+
+def do_report(d, n="default", kpis={}, options={}):
+    s = options.flatten_separator
+    flatten_state = flatten(d, '', s)
+    for k in sorted(flatten_state):
+        v = flatten_state[k]
+        if options.prefix is not None:
+            sys.stdout.write("%(p)s" % {"p": options.prefix, "s": s})
+
+        sys.stdout.write("%(n)s%(s)s%(k)s %(v)s" % locals())
+
+        if options.include_type:
+            sys.stdout.write(" %(t)s" % {"t": kpis[k]})
+
+        sys.stdout.write("\n")
+
+
+def flatten(d, parent_key='', s='_'):
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + s + k if parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten(v, new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def out(line=""):
+    sys.stdout.write(line + "\n")
+
+
+if __name__ == '__main__':
+    def handler(signal, frame):
+        sys.stdout.write('\n')
+        sys.exit(130)
+
+    signal.signal(signal.SIGINT, handler)
+    main()
