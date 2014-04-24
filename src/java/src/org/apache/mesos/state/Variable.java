@@ -23,11 +23,14 @@ public class Variable {
 
   /**
    * Returns the current value of this variable.
+   * @return value as bytes.
    */
   public native byte[] value();
 
   /**
    * Updates the current value of this variable.
+   * @param value   the value serialized to bytes.
+   * @return        variable with the new value.
    */
   public native Variable mutate(byte[] value);
 

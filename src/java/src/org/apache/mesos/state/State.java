@@ -36,18 +36,25 @@ import java.util.concurrent.Future;
  * other writes have been performed on the variable since your fetch.
  *
  * Example:
- *
+ * <pre>
+ * {@code
  *   State state = new ZooKeeperState();
  *   Future<Variable> variable = state.fetch("machines");
  *   Variable machines = variable.get();
  *   machines = machines.mutate(...);
  *   variable = state.store(machines);
  *   machines = variable.get();
+ * }
+ * </pre>
  */
 public interface State {
   /**
    * Returns an immutable "variable" representing the current value
    * from the state associated with the specified name.
+   *
+   * @param name    of the variable to fetch.
+   * @return        a future that wraps the variable that is being fetched.
+   * @see           Variable
    */
   Future<Variable> fetch(String name);
 
@@ -55,17 +62,25 @@ public interface State {
    * Returns an immutable "variable" representing the current value in
    * the state if updating the specified variable in the state was
    * successful, otherwise returns null.
+   *
+   * @param variable    variable to store.
+   * @return            a future that wraps the variable that was stored.
+   * @see               Variable
    */
   Future<Variable> store(Variable variable);
 
   /**
    * Returns true if successfully expunged the variable from the state
    * or false if the variable did not exist or was no longer valid.
+   *
+   * @param variable variable that is going to be expunged.
+   * @return         a future that wraps the outcome of the expunge.
    */
   Future<Boolean> expunge(Variable variable);
 
   /**
    * Returns an iterator of variable names in the state.
+   * @return the iterator of the names.
    */
   Future<Iterator<String>> names();
 }

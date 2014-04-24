@@ -176,7 +176,6 @@
       </plugin>
       <!-- Shade protobuf dependency. -->
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>2.2</version>
         <executions>
@@ -205,44 +204,7 @@
               <relocations>
                 <relocation>
                   <pattern>com.google.protobuf</pattern>
-                  <shadedPattern>org.apache.mesos.com.google.protobuf</shadedPattern>
-                </relocation>
-              </relocations>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <!-- Shade protobuf dependency. -->
-      <plugin>
-        <artifactId>maven-shade-plugin</artifactId>
-        <version>2.2</version>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>with-protobuf</shadedClassifierName>
-              <artifactSet>
-                <includes>
-                  <include>com.google.protobuf:protobuf-java</include>
-                </includes>
-              </artifactSet>
-              <filters>
-                <filter>
-                  <!-- Remove the source to keep the result smaller. -->
-                  <artifact>com.google.protobuf:protobuf-java</artifact>
-                  <excludes>
-                    <exclude>**/*.java</exclude>
-                  </excludes>
-                </filter>
-              </filters>
-              <relocations>
-                <relocation>
-                  <pattern>com.google.protobuf</pattern>
-                  <shadedPattern>org.apache.mesos.com.google.protobuf</shadedPattern>
+                  <shadedPattern>org.apache.mesos.protobuf</shadedPattern>
                 </relocation>
               </relocations>
             </configuration>

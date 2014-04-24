@@ -34,6 +34,9 @@ public interface SchedulerDriver {
   /**
    * Starts the scheduler driver. This needs to be called before any
    * other driver calls are made.
+   *
+   * @return    state of the scheduler.
+   * @see       Status
    */
   Status start();
 
@@ -45,11 +48,18 @@ public interface SchedulerDriver {
    * running (for some master specified failover timeout) allowing the
    * scheduler to reconnect (possibly in the same process, or from a
    * different process, for example, on a different machine).
+   *
+   * @param     failover true to reconnect false to disable reconnection.
+   * @return    state of the scheduler.
+   * @see       Status
    */
   Status stop(boolean failover);
 
   /**
    * Stops the scheduler driver assuming no failover.
+   *
+   * @return    state of the scheduler.
+   * @see       Status
    */
   Status stop();
 
@@ -60,6 +70,9 @@ public interface SchedulerDriver {
    * the return status of {@link #join}, see below), and instantiate
    * and start another driver if desired (from within the same
    * process).
+   *
+   * @return    state of the scheduler.
+   * @see       Status
    */
   Status abort();
 
@@ -68,11 +81,17 @@ public interface SchedulerDriver {
    * _blocking_ the current thread indefinitely. The return status of
    * this function can be used to determine if the driver was aborted
    * (see mesos.proto for a description of Status).
+   *
+   * @return    state of the scheduler.
+   * @see       Status
    */
   Status join();
 
   /**
    * Starts and immediately joins (i.e., blocks on) the driver.
+   *
+   * @return    state of the scheduler.
+   * @see       Status
    */
   Status run();
 
@@ -82,6 +101,11 @@ public interface SchedulerDriver {
    * from specific slaves). Any resources available are offered to the
    * framework via {@link Scheduler#resourceOffers} callback,
    * asynchronously.
+   *
+   * @param     requests collection of requests
+   * @return    state of the scheduler.
+   * @see       Request
+   * @see       Status
    */
   Status requestResources(Collection<Request> requests);
 
@@ -95,6 +119,18 @@ public interface SchedulerDriver {
    * currently tasks can only be launched per offer. In the future,
    * frameworks will be allowed to aggregate offers (resources) to
    * launch their tasks.
+   *
+   * @param offerId identifier of the offer that will be used to launch
+   *                this task.
+   * @param tasks   collection of tasks  that shoulde be launched.
+   * @param filters filters applied to unused resources.
+   *
+   * @return state of the scheduler.
+   *
+   * @see OfferID
+   * @see TaskInfo
+   * @see Filters
+   * @see Status
    */
   Status launchTasks(OfferID offerId,
                      Collection<TaskInfo> tasks,
@@ -102,6 +138,11 @@ public interface SchedulerDriver {
 
   /**
    * Launches the given set of tasks. See above for details.
+   *
+   * @param offerId identifier of the offer that will be used to launch
+   *                this task.
+   * @param tasks   collection of tasks  that shoulde be launched.
+   * @return        state of the scheduler.
    */
   Status launchTasks(OfferID offerId, Collection<TaskInfo> tasks);
 
@@ -111,6 +152,9 @@ public interface SchedulerDriver {
    * while it was attempting to kill a task it will need to retry in
    * the future Likewise, if unregistered / disconnected, the request
    * will be dropped (these semantics may be changed in the future).
+   *
+   * @param taskId  identifier of the task that will be killed.
+   * @return        state of the scheduler.
    */
   Status killTask(TaskID taskId);
 
@@ -120,11 +164,25 @@ public interface SchedulerDriver {
    * Filters). Note that this can be done at any time, it is not
    * necessary to do this within the {@link Scheduler#resourceOffers}
    * callback.
+   *
+   * @param offerId identifier of the offer that will be declined.
+   * @param filters filters applied to unused resources.
+   *
+   * @return state of the scheduler.
+   *
+   * @see OfferID
+   * @see Filters
+   * @see Status
    */
   Status declineOffer(OfferID offerId, Filters filters);
 
   /**
    * Declines an offer in its entirety. See above for details.
+   *
+   * @param offerId identifier of the offer that will be declined.
+   * @return        state of the scheduler.
+   * @see           OfferID
+   * @see           Status
    */
   Status declineOffer(OfferID offerId);
 
@@ -132,6 +190,9 @@ public interface SchedulerDriver {
    * Removes all filters, previously set by the framework (via {@link
    * #launchTasks}). This enables the framework to receive offers
    * from those filtered slaves.
+   *
+   * @return    state of the scheduler.
+   * @see       Status
    */
   Status reviveOffers();
 
@@ -139,6 +200,15 @@ public interface SchedulerDriver {
    * Sends a message from the framework to one of its executors. These
    * messages are best effort; do not expect a framework message to be
    * retransmitted in any reliable fashion.
+   *
+   * @param executorId  ID of the framework executor.
+   * @param slaveId     unique ID assigned to a slave.
+   * @param data        message payload.
+   *
+   * @return state of the scheduler.
+   *
+   * @see ExecutorID
+   * @see SlaveID
    */
   Status sendFrameworkMessage(ExecutorID executorId,
                               SlaveID slaveId,
@@ -147,6 +217,11 @@ public interface SchedulerDriver {
   /**
    * Reconciliation of tasks causes the master to send status updates for tasks
    * whose status differs from the status sent here.
+   *
+   * @param statuses    collection of status to reconcile.
+   * @return            state of the scheduler.
+   * @see               TaskStatus
+   * @see               SlaveID
    */
   Status reconcileTasks(Collection<TaskStatus> statuses);
 }

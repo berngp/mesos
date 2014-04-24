@@ -43,6 +43,10 @@ public class MesosExecutorDriver implements ExecutorDriver {
 
   /**
    * Creates a new driver that uses the specified Executor.
+   *
+   * @param executor    instance of the executor that will be used
+   *                    to connect to the slave.
+   * @see               Executor
    */
   public MesosExecutorDriver(Executor executor) {
     if (executor == null) {
