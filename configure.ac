@@ -151,6 +151,8 @@ AC_ARG_VAR([JAVA_CPPFLAGS], [preprocessor flags for JNI])
 
 AC_ARG_VAR([JAVA_LDFLAGS], [linker flags for JNI])
 
+AC_ARG_VAR([MAVEN_HOME], [path to the Maven Home which is used to find (MVN), e.g. MAVEN_HOME/bin/mvn])
+
 AC_ARG_VAR([PYTHON], [which Python interpreter to use])
 
 
@@ -410,10 +412,21 @@ __EOF__
 
   has_java=yes
 
-  # Test for Maven so we can build the jar.
-  AC_CHECK_PROG(MVN_CHECK, mvn, yes)
-  if test x"$MVN_CHECK" != x"yes"; then
-    AC_MSG_ERROR([Unable to find mvn on your path.])
+  # Test for Maven so we can build the jar
+  if test -z "$MAVEN_HOME"; then
+    AC_PATH_PROG([MVN], [mvn], [$MVN])
+
+    if test "x$MVN" = "x"; then
+      AC_MSG_ERROR([can not find mvn on your path.])
+    fi
+
+  else
+    AC_PATH_PROGS([MVN],[mvn], [$MVN], [$MAVEN_HOME/bin])
+
+    if test "x$MVN" = "x"; then
+      AC_MSG_ERROR([can not find mvn inside $MAVEN_HOME/bin])
+    fi
+
   fi
 fi
 
