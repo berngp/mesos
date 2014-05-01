@@ -71,6 +71,10 @@ public class MesosSchedulerDriver implements SchedulerDriver {
    *
    * TODO(vinod): Deprecate this in favor the constructor that takes
    * 'credential' as parameter.
+   *
+   * @param scheduler The scheduler
+   * @param framework The framework
+   * @param master    The master
    */
   public MesosSchedulerDriver(
       Scheduler scheduler,
@@ -99,6 +103,11 @@ public class MesosSchedulerDriver implements SchedulerDriver {
   /**
    * Same as the above constructor, except that it accepts 'credential'
    * as a parameter.
+   *
+   * @param scheduler   The scheduler
+   * @param framework   The framework data
+   * @param master      The master identifier
+   * @param credential  The credentials
    */
   public MesosSchedulerDriver(
       Scheduler scheduler,
@@ -129,10 +138,7 @@ public class MesosSchedulerDriver implements SchedulerDriver {
     initialize();
   }
 
-
-  /**
-   * See SchedulerDriver for descriptions of these.
-   */
+  /** See {@link SchedulerDriver} for descriptions of these. */
   public native Status start();
   public native Status stop(boolean failover);
   public Status stop() {
@@ -140,7 +146,6 @@ public class MesosSchedulerDriver implements SchedulerDriver {
   }
   public native Status abort();
   public native Status join();
-
   public Status run() {
     Status status = start();
     return status != Status.DRIVER_RUNNING ? status : join();
